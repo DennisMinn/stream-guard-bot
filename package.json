@@ -1,0 +1,25 @@
+{
+  "name": "stream-guard-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DennisMinn/stream-guard-bot.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/DennisMinn/stream-guard-bot/issues"
+  },
+  "homepage": "https://github.com/DennisMinn/stream-guard-bot#readme",
+  "dependencies": {
+    "tmi.js": "^1.8.5"
+  },
+  "devDependencies": {
+    "eslint": "^8.47.0"
+  }
+}
