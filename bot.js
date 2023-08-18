@@ -11,7 +11,7 @@ const opts = {
 	]
 };
 
-console.log(opts.identity)
+console.log(opts.identity);
 // Create a client with our options
 const client = new tmi.client(opts);
 
@@ -23,19 +23,28 @@ client.on('connected', onConnectedHandler);
 client.connect();
 
 // Called every time a message comes in
-function onMessageHandler (target, context, msg, self) {
+function onMessageHandler (channel, userstate, message, self) {
 	if (self) { return; } // Ignore messages from the bot
 
-	const commandName = msg.trim();
-
-	if (commandName === '!dice') {
-		const num = rollDice();
-		client.say(target, `You rolled a ${num}`);
-		console.log(`* Executed ${commandName} command`);
-	} else {
-		console.log(`* Unknown command ${commandName}`);
-	}
+	message = message.trim();
+    if (message.startsWith('!')) {
+        commandHandler(channel, message);
+    }
 }
+
+function commandHandler (channel, message) {
+    const [command, ...args] = message.split(" ");
+
+    if (command === '!dice'){
+		const num = rollDice();
+		client.say(channel, `You rolled a ${num}`);
+		console.log(`* Executed ${command} command`);
+	} else {
+		console.log(`* Unknown command ${command}`);
+	}
+
+}
+
 
 // Function called when the "dice" command is issued
 function rollDice () {
