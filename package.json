@@ -20,6 +20,8 @@
     "tmi.js": "^1.8.5"
   },
   "devDependencies": {
-    "eslint": "^8.47.0"
+    "eslint": "^8.47.0",
+    "langchain": "^0.0.130",
+    "npm-check-updates": "^16.12.2"
   }
 }
