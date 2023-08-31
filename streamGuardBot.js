@@ -5,6 +5,10 @@ const { FaissStore } = require('langchain/vectorstores/faiss');
 const { OpenAIEmbeddings } = require('langchain/embeddings/openai');
 const { fs } = require('fs');
 
+const addQACommand = '!addQA';
+const removeQACommand = '!removeQA';
+const listFAQCommand = '!listFAQ';
+
 const model = new OpenAI({
   modelName: 'gpt-3.5-turbo',
   temperature: 0,
@@ -30,28 +34,37 @@ class StreamGuardBot {
     this.vectorStore = await FaissStore.fromDocuments([], embeddings);
   }
 
+  async commandHandler(channel, userstate, command, args) {
+    if (command === listFAQCommand)
+      return this.listFAQ();
+
+    if (command === addQACommand)
+      return this.addQA(args[0], args[1]);
+
+    if (command == removeQACommand)
+      return this.removeQA(args[0]);
+  }
+
   async addQA(question, answer) {
+    console.log(`${addQACommand} ${this.channel} ${question} -> ${answer}`);
     const qa = { pageContent: `${question}\n${answer}` };
     await this.vectorStore.addDocuments([qa]);
-    this.vectorRetriever = this.vectorStore.asRetriever();
   }
 
   async removeQA(index) {
-    if (index - 1 < 0 || index - 1 >= this.vectorStore.index.ntotal()){
-      throw new Error('Index out of bounds');
-    }
-
+    console.log(`${removeQACommand} ${this.channel}`);
     let faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
-    faqs.splice(index - 1, 1);
+    faqs.splice(parseInt(index) - 1, 1);
     this.vectorStore = await FaissStore.fromDocuments(faqs, embeddings);
   }
 
-  listQA() {
+  listFAQ() {
+    console.log(`${listFAQCommand} ${this.channel}`);
     let faqs;
     faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
     faqs = faqs.map((faq, index) => (`${index + 1}) ${faq.pageContent}`));
     faqs = faqs.join('|\n');
-    console.log(faqs);
+    return faqs
   }
 
 	async respond(question) {
@@ -70,5 +83,6 @@ class StreamGuardBot {
     const answer = (await this.qaChain.invoke({ channel: this.channel, faq: faq, question: question })).answer
     return (answer !== "I don't know") ? answer : '';
 	}
-
 }
+
+module.exports = StreamGuardBot;

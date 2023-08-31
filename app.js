@@ -1,19 +1,21 @@
 const tmi = require('tmi.js');
+const StreamGuardManager = require('./streamGuardManager.js');
+
 
 // Define configuration options
 const opts = {
-	identity: {
-		username: process.env.STREAM_GUARD_USERNAME,
-		password: `oauth:${process.env.STREAM_GUARD_OAUTH_TOKEN}`,
-	},
-	channels: [
-		process.env.STREAM_GUARD_USERNAME
-	]
+  identity: {
+    username: process.env.STREAM_GUARD_USERNAME,
+    password: `oauth:${process.env.STREAM_GUARD_OAUTH_TOKEN}`,
+  },
+  channels: [
+    process.env.STREAM_GUARD_USERNAME
+  ]
 };
 
-console.log(opts.identity);
 // Create a client with our options
 const client = new tmi.client(opts);
+const streamGuardManager = new StreamGuardManager();
 
 // Register our event handlers (defined below)
 client.on('message', onMessageHandler);
@@ -23,36 +25,30 @@ client.on('connected', onConnectedHandler);
 client.connect();
 
 // Called every time a message comes in
-function onMessageHandler (channel, userstate, message, self) {
-	if (self) { return; } // Ignore messages from the bot
+async function onMessageHandler (channel, userstate, message, self) {
+  if (self) { return; } // Ignore messages from the bot
 
-	message = message.trim();
-    if (message.startsWith('!')) {
-        commandHandler(channel, message);
-    }
-}
+  channel = channel.substring(1);
+  message = message.trim();
 
-function commandHandler (channel, message) {
+  if (message.startsWith('!')) {
     const [command, ...args] = message.split(" ");
 
-    if (command === '!dice'){
-		const num = rollDice();
-		client.say(channel, `You rolled a ${num}`);
-		console.log(`* Executed ${command} command`);
-	} else {
-		console.log(`* Unknown command ${command}`);
-	}
+    if (command === '!guardChannel' && args[0].toLowerCase() === userstate.username){
+      client.join(args[0].toLowerCase());
+    } else if (command === '!dischargeChannel' && args[0].toLowerCase() === userstate.username){
+      client.part(args[0].toLowerCase());
+    }
 
-}
+    const response = await streamGuardManager.commandHandler(channel, userstate, command, args);
+    console.log(response);
+    if (response !== undefined)
+      client.say(channel, response);
+  }
 
-
-// Function called when the "dice" command is issued
-function rollDice () {
-	const sides = 6;
-	return Math.floor(Math.random() * sides) + 1;
 }
 
 // Called every time the bot connects to Twitch chat
 function onConnectedHandler (addr, port) {
-	console.log(`* Connected to ${addr}:${port}`);
+  console.log(`* Connected to ${addr}:${port}`);
 }
