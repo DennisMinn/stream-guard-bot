@@ -15,7 +15,7 @@ const opts = {
 
 // Create a client with our options
 const client = new tmi.client(opts);
-const streamGuardManager = new StreamGuardManager();
+const streamGuardManager = new StreamGuardManager(client);
 
 // Register our event handlers (defined below)
 client.on('message', onMessageHandler);
@@ -33,12 +33,6 @@ async function onMessageHandler (channel, userstate, message, self) {
 
   if (message.startsWith('!')) {
     const [command, ...args] = message.split(" ");
-
-    if (command === '!guardChannel' && args[0].toLowerCase() === userstate.username){
-      client.join(args[0].toLowerCase());
-    } else if (command === '!dischargeChannel' && args[0].toLowerCase() === userstate.username){
-      client.part(args[0].toLowerCase());
-    }
 
     const response = await streamGuardManager.commandHandler(channel, userstate, command, args);
     console.log(response);

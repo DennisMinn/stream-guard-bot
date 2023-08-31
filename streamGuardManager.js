@@ -1,13 +1,16 @@
 const StreamGuardBot = require('./streamGuardBot.js');
-const joinChannelCommand = '!guardChannel';
-const leaveChannelCommand = '!dischargeChannel';
+const joinChannelCommand = '!guard';
+const leaveChannelCommand = '!discharge';
 const addQACommand = '!addQA';
 const removeQACommand = '!removeQA';
 const listFAQCommand = '!listFAQ';
 
 
 class StreamGuardManager {
-  constructor() { this.channels = new Map(); }
+  constructor(client) {
+    this.channels = new Map();
+    this.client = client
+  }
 
   async commandHandler (channel, userstate, command, args) {
     if (command === '!dice'){
@@ -29,20 +32,20 @@ class StreamGuardManager {
     }
   }
 
-  async addChannel(channel){
-    channel = channel.toLowerCase();
-    if (this.channels.has(channel)){
+  async addChannel(requestedChannel){
+    if (this.channels.has(requestedChannel))
       return;
-    }
     
-    this.channels.set(channel, new StreamGuardBot(channel));
-    await this.channels.get(channel).initVectorStore();
-    return `${channel} is now guarded!`;
+    this.client.join(requestedChannel);
+    this.channels.set(requestedChannel, new StreamGuardBot(requestedChannel));
+    await this.channels.get(requestedChannel).initVectorStore();
+    return `${requestedChannel} is now guarded!`;
   }
 
-  removeChannel(channel){
-    this.channels.delete(channel.toLowerCase());
-    return `Stream Guard Bot has left ${channel}`;
+  removeChannel(requestedChannel){
+    this.client.part(requestedChannel);
+    this.channels.delete(requestedChannel);
+    return `Stream Guard Bot has left ${requestedChannel}`;
   }
 }
 
