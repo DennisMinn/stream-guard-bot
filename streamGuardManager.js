@@ -1,9 +1,7 @@
-const StreamGuardBot = require('./streamGuardBot.js');
+const sgb = require('./streamGuardBot.js');
+const StreamGuardBot = sgb.StreamGuardBot;
 const joinChannelCommand = '!guard';
 const leaveChannelCommand = '!discharge';
-const addQACommand = '!addQA';
-const removeQACommand = '!removeQA';
-const listFAQCommand = '!listFAQ';
 
 
 class StreamGuardManager {
@@ -19,7 +17,7 @@ class StreamGuardManager {
     }
 
     // Stream Guard Manager Command Handler
-    if ([addQACommand, removeQACommand, listFAQCommand].includes(command) && this.channels.has(channel)){
+    if ([sgb.addQACommand, sgb.removeQACommand, sgb.listFAQCommand].includes(command) && this.channels.has(channel)){
       return this.channels.get(channel).commandHandler(channel, userstate, command, args);
     }
 
@@ -54,4 +52,8 @@ function rollDice () {
 	return Math.floor(Math.random() * sides) + 1;
 }
 
-module.exports = StreamGuardManager;
+module.exports = {
+  StreamGuardManager,
+  joinChannelCommand,
+  leaveChannelCommand,
+}

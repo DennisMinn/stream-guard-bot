@@ -85,4 +85,9 @@ class StreamGuardBot {
 	}
 }
 
-module.exports = StreamGuardBot;
+module.exports = {
+  StreamGuardBot,
+  addQACommand,
+  removeQACommand,
+  listFAQCommand,
+}

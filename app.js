@@ -1,5 +1,6 @@
 const tmi = require('tmi.js');
-const StreamGuardManager = require('./streamGuardManager.js');
+const sgm = require('./streamGuardManager.js');
+const StreamGuardManager = sgm.StreamGuardManager;
 
 
 // Define configuration options
