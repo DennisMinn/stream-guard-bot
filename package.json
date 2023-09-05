@@ -20,9 +20,11 @@
     "tmi.js": "^1.8.5"
   },
   "devDependencies": {
+    "commander": "^11.0.0",
     "faiss-node": "^0.3.0",
     "fs": "^0.0.1-security",
     "jshint": "^2.13.6",
-    "langchain": "^0.0.130"
+    "langchain": "^0.0.130",
+    "string-argv": "^0.3.2"
   }
 }

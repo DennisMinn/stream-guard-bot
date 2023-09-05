@@ -5,51 +5,29 @@ const leaveChannelCommand = '!discharge';
 
 
 class StreamGuardManager {
-  constructor(client) {
-    this.channels = new Map();
-    this.client = client
-  }
-
-  async commandHandler (channel, userstate, command, args) {
-    if (command === '!dice'){
-      const num = rollDice();
-      return `You rolled a ${num}`;
-    }
-
-    // Stream Guard Manager Command Handler
-    if ([sgb.addQACommand, sgb.removeQACommand, sgb.listFAQCommand].includes(command) && this.channels.has(channel)){
-      return this.channels.get(channel).commandHandler(channel, userstate, command, args);
-    }
-
-    if (command === joinChannelCommand) {
-      return this.addChannel(args[0]);
-    }
-
-    if (command === leaveChannelCommand) {
-      return this.removeChannel(args[0]);
-    }
-  }
+  constructor() { this.channels = new Map(); }
 
   async addChannel(requestedChannel){
+    console.log(`Join ${requestedChannel}`);
     if (this.channels.has(requestedChannel))
       return;
     
-    this.client.join(requestedChannel);
     this.channels.set(requestedChannel, new StreamGuardBot(requestedChannel));
     await this.channels.get(requestedChannel).initVectorStore();
-    return `${requestedChannel} is now guarded!`;
   }
 
   removeChannel(requestedChannel){
-    this.client.part(requestedChannel);
+    console.log(`Part ${requestedChannel}`);
     this.channels.delete(requestedChannel);
-    return `Stream Guard Bot has left ${requestedChannel}`;
   }
-}
 
-function rollDice () {
-	const sides = 6;
-	return Math.floor(Math.random() * sides) + 1;
+  getChannel(requestedChannel){
+    console.log(`Get ${requestedChannel}`);
+    if (!this.channels.has(requestedChannel))
+      return
+
+    return this.channels.get(requestedChannel);
+  }
 }
 
 module.exports = {

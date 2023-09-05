@@ -34,17 +34,6 @@ class StreamGuardBot {
     this.vectorStore = await FaissStore.fromDocuments([], embeddings);
   }
 
-  async commandHandler(channel, userstate, command, args) {
-    if (command === listFAQCommand)
-      return this.listFAQ();
-
-    if (command === addQACommand)
-      return this.addQA(args[0], args[1]);
-
-    if (command == removeQACommand)
-      return this.removeQA(args[0]);
-  }
-
   async addQA(question, answer) {
     console.log(`${addQACommand} ${this.channel} ${question} -> ${answer}`);
     const qa = { pageContent: `${question}\n${answer}` };
@@ -53,9 +42,12 @@ class StreamGuardBot {
 
   async removeQA(index) {
     console.log(`${removeQACommand} ${this.channel}`);
-    let faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
+    const faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
+    const qa = faqs[index - 1];
+    console.log(`Removed: "${qa.pageContent}"`);
     faqs.splice(parseInt(index) - 1, 1);
     this.vectorStore = await FaissStore.fromDocuments(faqs, embeddings);
+    return qa;
   }
 
   listFAQ() {
@@ -63,7 +55,7 @@ class StreamGuardBot {
     let faqs;
     faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
     faqs = faqs.map((faq, index) => (`${index + 1}) ${faq.pageContent}`));
-    faqs = faqs.join('|\n');
+    faqs = faqs.join(' | ');
     return faqs
   }
 
