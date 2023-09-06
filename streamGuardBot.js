@@ -27,7 +27,7 @@ const prompt = PromptTemplate.fromTemplate(qaTemplate);
 class StreamGuardBot {
   constructor(channel) {
     this.channel = channel;
-    this.qaChain = new LLMChain({ llm: model, prompt: prompt, outputKey: 'answer'});
+    this.qaChain = new LLMChain({ llm: model, prompt: prompt, outputKey: 'answer' });
   }
 
   async initVectorStore() {
@@ -35,23 +35,23 @@ class StreamGuardBot {
   }
 
   async addQA(question, answer) {
-    console.log(`${addQACommand} ${this.channel} ${question} -> ${answer}`);
+    console.log(`${this.channel} ${addQACommand}: "${question} -> ${answer}"`);
     const qa = { pageContent: `${question}\n${answer}` };
     await this.vectorStore.addDocuments([qa]);
   }
 
   async removeQA(index) {
-    console.log(`${removeQACommand} ${this.channel}`);
     const faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
-    const qa = faqs[index - 1];
-    console.log(`Removed: "${qa.pageContent}"`);
-    faqs.splice(parseInt(index) - 1, 1);
+    const qa = faqs[index].pageContent.replace('\n', ' -> ');
+    console.log(`${this.channel} ${removeQACommand}: "${qa}"`);
+
+    faqs.splice(index, 1);
     this.vectorStore = await FaissStore.fromDocuments(faqs, embeddings);
     return qa;
   }
 
   listFAQ() {
-    console.log(`${listFAQCommand} ${this.channel}`);
+    console.log(`${this.channel} ${listFAQCommand}`);
     let faqs;
     faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
     faqs = faqs.map((faq, index) => (`${index + 1}) ${faq.pageContent}`));
@@ -60,6 +60,7 @@ class StreamGuardBot {
   }
 
 	async respond(question) {
+    console.log(`${channel} respond to ${question}`);
     if (this.vectorStore.index.ntotal() === 0) {
       return '';
     }

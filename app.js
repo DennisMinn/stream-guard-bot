@@ -79,10 +79,9 @@ cli.command(sgb.addQACommand)
   .action((question, answer, options) => {
     const bot = manager.getChannel(options.username);
     bot.addQA(question, answer);
-    client.say(options.channel, `Added "${question}" -> "${answer}" to FAQ`);
+    client.say(options.channel, `Added "${question} -> ${answer}" to FAQ`);
   });
 
-// TODO Resolve object promise 'Remove [object Promise] from FAQ'
 cli.command(sgb.removeQACommand)
   .description('Removes question/answer pair to FAQ')
   .argument('<index>', 'TODO')
@@ -90,9 +89,10 @@ cli.command(sgb.removeQACommand)
   .option('--username <username>', 'TODO')
   .action((index, options) => {
     const bot = manager.getChannel(options.username);
-    const qa = bot.removeQA(index);
-    // client.say(options.channel, `Remove ${qa} from FAQ`);
-    client.say(options.channel, `Successfully removed FAQ ${index}`);
+    index = parseInt(index) - 1;
+    bot.removeQA(index)
+      .then(qa => { client.say(options.channel, `Removed "${qa}" from FAQ`); })
+      .catch(error => { console.log(error); });
   });
 
 // Called every time a message comes in
@@ -117,6 +117,9 @@ async function onMessageHandler (channel, userstate, message, self) {
     cli.parseAsync(process.argv.concat(command, channelFlag, usernameFlag));
     return;
   }
+
+  const response = await manager.getChannel(channel).respond(message);
+  client.say(channel, response);
 }
 
 // Called every time the bot connects to Twitch chat
