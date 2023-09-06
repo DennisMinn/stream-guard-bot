@@ -8,6 +8,7 @@ const { fs } = require('fs');
 const addQACommand = '!addQA';
 const removeQACommand = '!removeQA';
 const listFAQCommand = '!listFAQ';
+const notInFAQ = "The information isn't specified in the FAQ.";
 
 const model = new OpenAI({
   modelName: 'gpt-3.5-turbo',
@@ -15,12 +16,11 @@ const model = new OpenAI({
   maxConcurrency: 100
 });
 const embeddings = new OpenAIEmbeddings({ maxConcurrency: 100 });
-const qaTemplate = `You are friendly AI assistant to {channel} meant to answer questions. According to the following FAQ what is the answer to the question?  Keep your responses under 25 words and respond in the 3rd person. If you don't know the answer or the question is unrelated to the FAQ, just say that you don't know, don't try to make up an answer. 
-
+const qaTemplate = `As {channel}'s friendly AI Twitch assistant, your role is to respond to users. Remember, users are communicating with {channel}, not you. To answer their queries, refer to {channel}'s FAQ. Keep your responses concise, under 25 words, and respond in the 3rd person. If the answer is not provided in the FAQ, respond with "${notInFAQ}". Do not make up your response.
 << FAQ >>
 {faq}
 
-<< question >>
+<< user >>
 {question}`;
 const prompt = PromptTemplate.fromTemplate(qaTemplate);
 
@@ -60,7 +60,7 @@ class StreamGuardBot {
   }
 
 	async respond(question) {
-    console.log(`${channel} respond to ${question}`);
+    console.log(`${this.channel} respond: ${question}`);
     if (this.vectorStore.index.ntotal() === 0) {
       return '';
     }
@@ -69,12 +69,12 @@ class StreamGuardBot {
     const faq = result[0].pageContent;
     const l2Distance = result[1];
 
-    if (l2Distance > 0.25) {
+    if (l2Distance > 0.5) {
       return '';
     }
 
     const answer = (await this.qaChain.invoke({ channel: this.channel, faq: faq, question: question })).answer
-    return (answer !== "I don't know") ? answer : '';
+    return (answer !== notInFAQ) ? answer : '';
 	}
 }
 
