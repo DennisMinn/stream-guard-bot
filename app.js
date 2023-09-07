@@ -5,13 +5,17 @@ const sgm = require('./streamGuardManager.js');
 const sgb = require('./streamGuardBot.js');
 const StreamGuardManager = sgm.StreamGuardManager;
 
-const commands = [
+const sgmCommands = [
     sgm.joinChannelCommand,
     sgm.leaveChannelCommand,
+]
+
+const sgbCommands = [
     sgb.addQACommand,
     sgb.removeQACommand,
     sgb.listFAQCommand,
 ]
+
 
 // Define configuration options
 const opts = {
@@ -43,6 +47,11 @@ cli.command(sgm.joinChannelCommand)
   .option('--channel <channel>', 'TODO')
   .option('--username <username>', 'TODO')
   .action((requestedChannel, options) => {
+    if (options.channel !== process.env.STREAM_GUARD_USERNAME)
+      return;
+    if (options.username !== requestedChannel)
+      return;
+
     manager.addChannel(requestedChannel);
     client.join(requestedChannel);
     client.say(options.channel, `${requestedChannel} is now guarded!`);
@@ -54,6 +63,11 @@ cli.command(sgm.leaveChannelCommand)
   .option('--channel <channel>', 'TODO')
   .option('--username <username>', 'TODO')
   .action((requestedChannel, options) => {
+    if (options.channel !== process.env.STREAM_GUARD_USERNAME && options.channel !== requestedChannel)
+      return;
+    if (options.username !== requestedChannel)
+      return;
+
     client.say(options.channel, `Stream Guard Bot is leaving ${requestedChannel}'s chat`);
     client.part(requestedChannel);
     manager.removeChannel(requestedChannel);
@@ -64,8 +78,10 @@ cli.command(sgb.listFAQCommand)
   .description('Lists all added question/answer pairs in FAQ')
   .option('--channel <channel>', 'TODO')
   .option('--username <username>', 'TODO')
+  .option('--broadcaster', 'TODO')
+  .option('--moderator', 'TODO')
   .action((options) => {
-    const bot = manager.getChannel(options.username);
+    const bot = manager.getChannel(options.channel);
     const faq = bot.listFAQ();
     client.say(options.channel, faq);
   });
@@ -76,8 +92,13 @@ cli.command(sgb.addQACommand)
   .argument('<answer>', 'TODO')
   .option('--channel <channel>', 'TODO')
   .option('--username <username>', 'TODO')
+  .option('--broadcaster', 'TODO')
+  .option('--moderator', 'TODO')
   .action((question, answer, options) => {
-    const bot = manager.getChannel(options.username);
+    if (!options.broadcaster && !options.moderator)
+      return
+
+    const bot = manager.getChannel(options.channel);
     bot.addQA(question, answer);
     client.say(options.channel, `Added "${question} -> ${answer}" to FAQ`);
   });
@@ -87,8 +108,13 @@ cli.command(sgb.removeQACommand)
   .argument('<index>', 'TODO')
   .option('--channel <channel>', 'TODO')
   .option('--username <username>', 'TODO')
+  .option('--broadcaster', 'TODO')
+  .option('--moderator', 'TODO')
   .action((index, options) => {
-    const bot = manager.getChannel(options.username);
+    if (!options.broadcaster && !options.moderator)
+      return
+
+    const bot = manager.getChannel(options.channel);
     index = parseInt(index) - 1;
     bot.removeQA(index)
       .then(qa => { client.say(options.channel, `Removed "${qa}" from FAQ`); })
@@ -109,14 +135,30 @@ async function onMessageHandler (channel, userstate, message, self) {
     return;
   }
 
-  // Checks for Stream Guard commands
-  if (commands.some(command => message.startsWith(command))) {
+  // Checks for Stream Guard Manager commands
+  if (sgmCommands.some(command => message.startsWith(command))) {
     command = parseArgsStringToArgv(message);
-    channelFlag = ['--channel', channel];
-    usernameFlag = ['--username', userstate.username];
+    const channelFlag = ['--channel', channel];
+    const usernameFlag = ['--username', userstate.username];
+
     cli.parseAsync(process.argv.concat(command, channelFlag, usernameFlag));
     return;
   }
+
+  // Checks for Stream Bot Manager commands
+  if (sgbCommands.some(command => message.startsWith(command))) {
+    command = parseArgsStringToArgv(message);
+    const channelFlag = ['--channel', channel];
+    const usernameFlag = ['--username', userstate.username];
+    const broadcasterFlag = userstate.badges.broadcaster ? ['--broadcaster'] : [];
+    const moderatorFlag = userstate.badges.moderator ? ['--moderator'] : [];
+
+    cli.parseAsync(process.argv.concat(command, channelFlag, usernameFlag, broadcasterFlag, moderatorFlag));
+    return;
+  }
+
+  if (message.startsWith('!'))
+    return;
 
   const response = await manager.getChannel(channel).respond(message);
   client.say(channel, response);
