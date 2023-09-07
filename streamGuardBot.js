@@ -54,7 +54,8 @@ class StreamGuardBot {
     console.log(`${this.channel} ${listFAQCommand}`);
     let faqs;
     faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
-    faqs = faqs.map((faq, index) => (`${index + 1}) ${faq.pageContent}`));
+    faqs = faqs.map((faq, index) => `${index + 1}) ${faq.pageContent}`);
+    faqs = faqs.map(faq => faq.replace('\n', ' -> '));
     faqs = faqs.join(' | ');
     return faqs
   }
