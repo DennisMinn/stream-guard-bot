@@ -30,8 +30,6 @@ const opts = {
 
 // Create a client with our options
 const client = new tmi.client(opts);
-const manager = new StreamGuardManager(client);
-const cli = new commander.Command();
 
 // Register our event handlers (defined below)
 client.on('message', onMessageHandler);
@@ -39,6 +37,10 @@ client.on('connected', onConnectedHandler);
 
 // Connect to Twitch:
 client.connect();
+
+const manager = new StreamGuardManager(client);
+const cli = new commander.Command();
+cli.exitOverride();
 
 // Stream Guard Manager Commands
 cli.command(sgm.joinChannelCommand)
@@ -68,7 +70,7 @@ cli.command(sgm.leaveChannelCommand)
     if (options.username !== requestedChannel)
       return;
 
-    client.say(options.channel, `Stream Guard Bot is leaving ${requestedChannel}'s chat`);
+    client.say(options.channel, `Stream Guard Bot has left ${requestedChannel}'s chat`);
     client.part(requestedChannel);
     manager.removeChannel(requestedChannel);
   });
@@ -118,12 +120,17 @@ cli.command(sgb.removeQACommand)
     index = parseInt(index) - 1;
     bot.removeQA(index)
       .then(qa => { client.say(options.channel, `Removed "${qa}" from FAQ`); })
-      .catch(error => { console.log(error); });
+      .catch(error => {
+        console.log(error.message);
+        client.say(options.channel, error.message);
+      });
   });
 
 // Called every time a message comes in
 async function onMessageHandler (channel, userstate, message, self) {
   if (self) { return; } // Ignore messages from the bot
+  if (message.includes('--channel') || message.includes('--username'))
+    return;
 
   // Removes hash prefix
   channel = channel.substring(1);
@@ -141,7 +148,15 @@ async function onMessageHandler (channel, userstate, message, self) {
     const channelFlag = ['--channel', channel];
     const usernameFlag = ['--username', userstate.username];
 
-    cli.parseAsync(process.argv.concat(command, channelFlag, usernameFlag));
+    try {
+      cli.parse(process.argv.concat(command, channelFlag, usernameFlag));
+    } catch (error) {
+      if (error.code === 'commander.helpDisplayed')
+        return;
+
+      console.log(error.message)
+      client.say(channel, error.message);
+    }
     return;
   }
 
@@ -153,15 +168,29 @@ async function onMessageHandler (channel, userstate, message, self) {
     const broadcasterFlag = userstate.badges.broadcaster ? ['--broadcaster'] : [];
     const moderatorFlag = userstate.badges.moderator ? ['--moderator'] : [];
 
-    cli.parseAsync(process.argv.concat(command, channelFlag, usernameFlag, broadcasterFlag, moderatorFlag));
+    try {
+      cli.parse(process.argv.concat(command, channelFlag, usernameFlag, broadcasterFlag, moderatorFlag));
+    } catch (error) {
+      if (error.code === 'commander.helpDisplayed')
+        return;
+
+      console.log(error.message);
+      client.say(channel, error.message);
+    }
+
     return;
   }
 
   if (message.startsWith('!'))
     return;
 
-  const response = await manager.getChannel(channel).respond(message);
-  client.say(channel, response);
+  try {
+    const response = await manager.getChannel(channel).respond(message);
+    if (response !== '')
+      client.say(channel, `@${userstate.username} ${response}`);
+  } catch (error) {
+    console.log(error.message);
+  }
 }
 
 // Called every time the bot connects to Twitch chat

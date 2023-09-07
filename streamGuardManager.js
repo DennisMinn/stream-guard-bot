@@ -24,7 +24,7 @@ class StreamGuardManager {
   getChannel(requestedChannel){
     console.log(`Get ${requestedChannel}`);
     if (!this.channels.has(requestedChannel))
-      return
+      throw new ReferenceError(`Channel is not guarded, have you called ${joinChannelCommand} <your_channel_name> first?`);
 
     return this.channels.get(requestedChannel);
   }

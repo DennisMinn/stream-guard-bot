@@ -41,6 +41,10 @@ class StreamGuardBot {
   }
 
   async removeQA(index) {
+    if (!this.vectorStore._index || index < 0 || index >= this.vectorStore.index.ntotal()){
+      throw RangeError(`Question index does not exist, call ${listFAQCommand} to see all question indices`)
+    }
+
     const faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
     const qa = faqs[index].pageContent.replace('\n', ' -> ');
     console.log(`${this.channel} ${removeQACommand}: "${qa}"`);
@@ -62,8 +66,8 @@ class StreamGuardBot {
 
 	async respond(question) {
     console.log(`${this.channel} respond: ${question}`);
-    if (this.vectorStore.index.ntotal() === 0) {
-      return '';
+    if (!this.vectorStore._index){
+      throw ReferenceError(`No questions have been added`);
     }
 
 		const result = (await this.vectorStore.similaritySearchWithScore(question, 1))[0];
@@ -71,6 +75,7 @@ class StreamGuardBot {
     const l2Distance = result[1];
 
     if (l2Distance > 0.5) {
+      console.log(`Not close enough distance: ${l2Distance}`)
       return '';
     }
 
