@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^6.6.0",
+    "cohere-ai": "^5.0.2",
     "commander": "^11.0.0",
     "eslint": "^8.49.0",
     "eslint-config-standard-with-typescript": "^39.0.0",
@@ -32,6 +33,7 @@
     "fs": "^0.0.1-security",
     "jshint": "^2.13.6",
     "langchain": "^0.0.130",
+    "pickleparser": "^0.1.0",
     "string-argv": "^0.3.2",
     "typescript": "^5.2.2"
   }
