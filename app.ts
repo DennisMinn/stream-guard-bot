@@ -44,8 +44,8 @@ application.connect();
 // Error Handling for CLI
 cli.exitOverride();
 
-joinChannels();
-setInterval(joinChannels, 120000);
+// joinChannels();
+// setInterval(joinChannels, 120000);
 
 // Called every time the bot connects to Twitch chat
 function onConnectedHandler (addr, port): void {
@@ -65,8 +65,9 @@ async function onMessageHandler (channel, userstate, message, self): Promise<und
 
   const channelFlag = ['--channel', channel];
   const usernameFlag = ['--username', userstate.username];
-  const broadcasterFlag = userstate.badges.broadcaster !== undefined ? ['--broadcaster'] : [];
-  const moderatorFlag = userstate.badges.moderator !== undefined ? ['--moderator'] : [];
+  const broadcasterFlag = userstate.badges?.broadcaster !== undefined ? ['--broadcaster'] : [];
+  const moderatorFlag = userstate.badges?.moderator !== undefined ? ['--moderator'] : [];
+  console.log(broadcasterFlag, moderatorFlag);
 
   // Checks for Stream Guard Manager commands
   if (sgmCommands.some(command => message.startsWith(command))) {
@@ -229,7 +230,6 @@ cli.command(removeQACommand)
 async function getStreams (): Promise<Array<{ channel: string, category: string }>> {
   const apiURL = 'https://api.twitch.tv/helix/streams';
   const queryParameters = new URLSearchParams({
-    user_login: 'hyoon',
     language: 'en',
     first: '100',
     after: ''
@@ -271,6 +271,7 @@ async function getStreams (): Promise<Array<{ channel: string, category: string 
       break;
     }
     queryParameters.set('after', pagination.cursor);
+    break;
   }
 
   return streams;
