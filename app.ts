@@ -1,4 +1,4 @@
-import { client } from 'tmi.js';
+import { client as Client } from 'tmi.js';
 import { Command } from 'commander';
 import { parseArgsStringToArgv } from 'string-argv';
 import { StreamGuardManager, joinChannelCommand, leaveChannelCommand } from './streamGuardManager.js';
@@ -6,6 +6,7 @@ import { addQACommand, removeQACommand, listFAQCommand } from './streamGuardBot.
 
 const CLIENTID = process.env.CLIENT_ID;
 const CLIENTSECRET = process.env.CLIENT_SECRET;
+
 const sgmCommands: string[] = [
   joinChannelCommand,
   leaveChannelCommand
@@ -29,32 +30,44 @@ const opts = {
     process.env.STREAM_GUARD_USERNAME
   ]
 };
-
+const application = new Client(opts);
 const manager = new StreamGuardManager();
-const application = new client(opts);
 const cli = new Command();
 
-manager.addChannel(process.env.STREAM_GUARD_USERNAME);
-
 // Register our event handlers
-application.on('message', onMessageHandler);
+application.on('chat', onMessageHandler);
+application.on('timeout', (channel, username, reason, duration, userstate) => {
+  channel = channel.substring(1);
+  const channelBot = manager.getChannel(channel);
+  channelBot.logMessage(username, 'TIMEOUT').catch(error => { console.log(error); });
+});
+application.on('ban', (channel, username, reason, userstate) => {
+  channel = channel.substring(1);
+  const channelBot = manager.getChannel(channel);
+  channelBot.logMessage(username, 'BAN').catch(error => { console.log(error); });
+});
+application.on('messagedeleted', (channel, username, deletedMessage, userstate) => {
+  channel = channel.substring(1);
+  const channelBot = manager.getChannel(channel);
+  channelBot.logMessage(username, `DELELTEDMESSAGE_${deletedMessage}`).catch(error => { console.log(error); });
+});
+
 application.on('connected', onConnectedHandler);
-application.connect();
+application.connect().catch(error => { console.log(error); });
 
 // Error Handling for CLI
 cli.exitOverride();
 
-// joinChannels();
-// setInterval(joinChannels, 120000);
-
 // Called every time the bot connects to Twitch chat
 function onConnectedHandler (addr, port): void {
   console.log(`* Connected to ${addr}:${port}`);
+  manager.addChannel(process.env.STREAM_GUARD_USERNAME);
+  joinChannels().catch(error => { console.log(error); });
 }
 
 // Called every time a message comes in
-async function onMessageHandler (channel, userstate, message, self): Promise<undefined> {
-  if (self) { return; } // Ignore messages from the bot
+function onMessageHandler (channel, userstate, message, self): void {
+  // if (self) { return; } // Ignore messages from the bot
   if (message.includes('--channel') === true || message.includes('--username') === true) {
     return;
   }
@@ -67,7 +80,6 @@ async function onMessageHandler (channel, userstate, message, self): Promise<und
   const usernameFlag = ['--username', userstate.username];
   const broadcasterFlag = userstate.badges?.broadcaster !== undefined ? ['--broadcaster'] : [];
   const moderatorFlag = userstate.badges?.moderator !== undefined ? ['--moderator'] : [];
-  console.log(broadcasterFlag, moderatorFlag);
 
   // Checks for Stream Guard Manager commands
   if (sgmCommands.some(command => message.startsWith(command))) {
@@ -94,7 +106,7 @@ async function onMessageHandler (channel, userstate, message, self): Promise<und
       if (error.code === 'commander.helpDisplayed') {
         return;
       }
-      // console.log(error.message);
+      console.log(error.message);
       application.say(channel, error.message);
     }
     return;
@@ -105,12 +117,12 @@ async function onMessageHandler (channel, userstate, message, self): Promise<und
   }
 
   try {
-    console.log(message);
     const channelBot = manager.getChannel(channel);
-    channelBot.logMessage(message);
+    channelBot.logMessage(userstate.username, message)
+      .catch(error => { console.log(error); });
 
-    const response = await channelBot.respond(message);
-    application.say(channel, (response !== '') ? `@${userstate.username} ${response}` : '');
+    // const response = await channelBot.respond(message);
+    // application.say(channel, (response !== '') ? `@${userstate.username} ${response}` : '');
   } catch (error) {
     console.log(error.message);
   }
@@ -201,7 +213,8 @@ cli.command(addQACommand)
     }
 
     const bot = manager.getChannel(options.channel);
-    bot.addQA(question, answer);
+    bot.addQA(question, answer)
+      .catch(error => { console.log(error); });
     application.say(options.channel, `Added "${question} -> ${answer}" to FAQ`);
   });
 
@@ -277,14 +290,24 @@ async function getStreams (): Promise<Array<{ channel: string, category: string 
   return streams;
 }
 
+function pauseExecution (milliseconds: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(() => {
+      resolve();
+    }, milliseconds);
+  });
+}
+
 async function joinChannels (): Promise<undefined> {
   console.log('Updating Channels');
   const streams = await getStreams();
-  streams.forEach(stream => {
+  for (const stream of streams) {
     manager.addChannel(stream.channel);
-    application.join(stream.channel);
-
-    const channelBot = manager.getChannel(stream.channel);
-    channelBot.setCategory(stream.category);
-  });
+    application.join(stream.channel)
+      .then((data) => { console.log(data); })
+      .catch((error) => { console.log(error); });
+    manager.getChannel(stream.channel).setCategory(stream.category);
+    await pauseExecution(1000);
+  }
+  console.log('Done Joining');
 }

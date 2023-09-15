@@ -1,5 +1,4 @@
 import { StreamGuardBot } from './streamGuardBot.js';
-import { parseArgsStringToArgv } from 'string-argv';
 
 export const joinChannelCommand = '!guard';
 export const leaveChannelCommand = '!discharge';

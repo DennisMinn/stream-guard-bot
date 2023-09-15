@@ -96,11 +96,11 @@ export class StreamGuardBot {
     this.category = category;
   }
 
-  public async logMessage (message: string): Promise<undefined> {
+  public async logMessage (username: string, message: string): Promise<undefined> {
     const timestamp = new Date().toISOString();
-    fs.promises.appendFile(
-      `data/${this.channel}.tsv`,
-      `${timestamp}\t${this.category}\t${message}\n`
-    );
+    const filePath = `data/${this.channel}.tsv`;
+    const data = `${timestamp}\t${this.category}\t${username}\t${message}\n`;
+    fs.promises.appendFile(filePath, data)
+      .catch(error => { console.log(error); });
   }
 }
