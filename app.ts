@@ -63,6 +63,7 @@ function onConnectedHandler (addr, port): void {
   console.log(`* Connected to ${addr}:${port}`);
   manager.addChannel(process.env.STREAM_GUARD_USERNAME);
   joinChannels().catch(error => { console.log(error); });
+  setInterval(joinChannels, 1800000);
 }
 
 // Called every time a message comes in
@@ -249,7 +250,8 @@ async function getStreams (): Promise<Array<{ channel: string, category: string 
   });
 
   let streams: Array<{ channel: string, category: string }> = [];
-  while (true) {
+  let counter = 0;
+  while (counter <= 150) {
     const response = await fetch(`${apiURL}?${queryParameters.toString()}`, {
       headers: {
         'Client-ID': CLIENTID,
@@ -284,7 +286,7 @@ async function getStreams (): Promise<Array<{ channel: string, category: string 
       break;
     }
     queryParameters.set('after', pagination.cursor);
-    break;
+    counter = counter + 1;
   }
 
   return streams;
