@@ -1,6 +1,4 @@
 import { client as Client } from 'tmi.js';
-import { Command } from 'commander';
-import { parseArgsStringToArgv } from 'string-argv';
 import { StreamGuardManager, joinChannelCommand, leaveChannelCommand } from './streamGuardManager.js';
 import { addQACommand, removeQACommand, listFAQCommand } from './streamGuardBot.js';
 
@@ -16,6 +14,7 @@ const sgbCommands: string[] = [
   removeQACommand,
   listFAQCommand
 ];
+const allCommands: string[] = sgmCommands.concat(sgbCommands);
 
 let accessToken = process.env.STREAM_GUARD_OAUTH_TOKEN;
 let refreshToken = process.env.STREAM_GUARD_REFRESH_TOKEN;
@@ -30,104 +29,74 @@ const opts = {
     process.env.STREAM_GUARD_USERNAME
   ]
 };
-const application = new Client(opts);
+const client = new Client(opts);
 const manager = new StreamGuardManager();
-const cli = new Command();
 
 // Register our event handlers
-application.on('chat', onMessageHandler);
-application.on('timeout', (channel, username, reason, duration, userstate) => {
-  channel = channel.substring(1);
-  const channelBot = manager.getChannel(channel);
-  channelBot.logMessage(username, 'TIMEOUT').catch(error => { console.log(error); });
-});
-application.on('ban', (channel, username, reason, userstate) => {
-  channel = channel.substring(1);
-  const channelBot = manager.getChannel(channel);
-  channelBot.logMessage(username, 'BAN').catch(error => { console.log(error); });
-});
-application.on('messagedeleted', (channel, username, deletedMessage, userstate) => {
-  channel = channel.substring(1);
-  const channelBot = manager.getChannel(channel);
-  channelBot.logMessage(username, `DELELTEDMESSAGE_${deletedMessage}`).catch(error => { console.log(error); });
+client.on('connected', async (address, port) => {
+  console.log(`* Connected to ${address}:${port}`);
+  void manager.addChannel(process.env.STREAM_GUARD_USERNAME);
+  void joinChannels();
+  // setInterval(joinChannels, 1800000);
 });
 
-application.on('connected', onConnectedHandler);
-application.connect().catch(error => { console.log(error); });
-
-// Error Handling for CLI
-cli.exitOverride();
-
-// Called every time the bot connects to Twitch chat
-function onConnectedHandler (addr, port): void {
-  console.log(`* Connected to ${addr}:${port}`);
-  manager.addChannel(process.env.STREAM_GUARD_USERNAME);
-  joinChannels().catch(error => { console.log(error); });
-  setInterval(joinChannels, 1800000);
-}
-
-// Called every time a message comes in
-function onMessageHandler (channel, userstate, message, self): void {
-  // if (self) { return; } // Ignore messages from the bot
-  if (message.includes('--channel') === true || message.includes('--username') === true) {
+client.on('chat', async (channel, userstate, message, self) => {
+  if (userstate.username === process.env.STREAM_GUARD_USERNAME) {
     return;
   }
 
-  // Removes hash prefix
+  if (
+    !allCommands.some(command => message.startsWith(command)) &&
+    message.startsWith('!') === true
+  ) {
+    return;
+  }
+
   channel = channel.substring(1);
   message = message.trim();
 
-  const channelFlag = ['--channel', channel];
-  const usernameFlag = ['--username', userstate.username];
-  const broadcasterFlag = userstate.badges?.broadcaster !== undefined ? ['--broadcaster'] : [];
-  const moderatorFlag = userstate.badges?.moderator !== undefined ? ['--moderator'] : [];
-
-  // Checks for Stream Guard Manager commands
+  // Stream Guard Manager commands
   if (sgmCommands.some(command => message.startsWith(command))) {
-    try {
-      const command = parseArgsStringToArgv(message);
-      cli.parse(process.argv.concat(command, channelFlag, usernameFlag));
-    } catch (error) {
-      if (error.code === 'commander.helpDisplayed') {
-        return;
-      }
-
-      console.log(error.message);
-      application.say(channel, error.message);
-    }
+    await manager.commandHandler(client, channel, userstate, message);
     return;
   }
 
-  // Checks for Stream Bot Manager commands
+  // Stream Guard Bot commands
   if (sgbCommands.some(command => message.startsWith(command))) {
-    try {
-      const command = parseArgsStringToArgv(message);
-      cli.parse(process.argv.concat(command, channelFlag, usernameFlag, broadcasterFlag, moderatorFlag));
-    } catch (error) {
-      if (error.code === 'commander.helpDisplayed') {
-        return;
-      }
-      console.log(error.message);
-      application.say(channel, error.message);
-    }
+    const channelBot = await manager.getChannel(channel);
+    await channelBot.commandHandler(client, channel, userstate, message);
     return;
   }
 
-  if (message.startsWith('!') === true) {
-    return;
+  const channelBot = await manager.getChannel(channel);
+  const response = await channelBot.respond(message);
+  if (response !== undefined && response !== '') {
+    client.say(channel, `@${userstate.username} ${response}`);
   }
+});
 
-  try {
-    const channelBot = manager.getChannel(channel);
-    channelBot.logMessage(userstate.username, message)
-      .catch(error => { console.log(error); });
+// Logging
+client.on('chat', (channel, userstate, message, self) => {
+  void manager.getChannel(channel.substring(1))
+    .then(channelBot => { channelBot.logMessage(userstate.username, message); });
+});
 
-    // const response = await channelBot.respond(message);
-    // application.say(channel, (response !== '') ? `@${userstate.username} ${response}` : '');
-  } catch (error) {
-    console.log(error.message);
-  }
-}
+client.on('timeout', (channel, username, reason, duration, userstate) => {
+  void manager.getChannel(channel.substring(1))
+    .then(channelBot => { channelBot.logMessage(username, 'TIMEOUT'); });
+});
+
+client.on('ban', (channel, username, reason, userstate) => {
+  void manager.getChannel(channel.substring(1))
+    .then(channelBot => { channelBot.logMessage(username, 'BAN'); });
+});
+
+client.on('messagedeleted', (channel, username, deletedMessage, userstate) => {
+  void manager.getChannel(channel.substring(1))
+    .then(channelBot => { channelBot.logMessage(username, `DELELTEDMESSAGE_${deletedMessage}`); });
+});
+
+client.connect();
 
 async function refreshUserAccessToken (): Promise<undefined> {
   const apiURL = 'https://id.twitch.tv/oauth2/token';
@@ -140,7 +109,7 @@ async function refreshUserAccessToken (): Promise<undefined> {
 
   const response = await fetch(apiURL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { 'Content-Type': 'client/x-www-form-urlencoded' },
     body: data
   });
 
@@ -148,98 +117,6 @@ async function refreshUserAccessToken (): Promise<undefined> {
   accessToken = token.access_token;
   refreshToken = token.refresh_token;
 }
-
-// Stream Guard Manager Commands
-cli.command(joinChannelCommand)
-  .description('Adds channel to Stream Guard Manager')
-  .argument('<requestedChannel>', 'TODO')
-  .option('--channel <channel>', 'TODO')
-  .option('--username <username>', 'TODO')
-  .action((requestedChannel, options) => {
-    if (options.channel !== process.env.STREAM_GUARD_USERNAME) {
-      return;
-    }
-
-    if (options.username !== requestedChannel) {
-      return;
-    }
-
-    manager.addChannel(requestedChannel);
-    application.join(requestedChannel);
-    application.say(options.channel, `${requestedChannel} is now guarded!`);
-  });
-
-cli.command(leaveChannelCommand)
-  .description('Removes channel from Stream Guard Manager')
-  .argument('<requestedChannel>', 'TODO')
-  .option('--channel <channel>', 'TODO')
-  .option('--username <username>', 'TODO')
-  .action((requestedChannel, options) => {
-    if (options.channel !== process.env.STREAM_GUARD_USERNAME && options.channel !== requestedChannel) {
-      return;
-    }
-    if (options.username !== requestedChannel) {
-      return;
-    }
-
-    application.say(options.channel, `Stream Guard Bot has left ${requestedChannel}'s chat`);
-    application.part(requestedChannel);
-    manager.removeChannel(requestedChannel);
-  });
-
-// Stream Guard Bot Commands
-cli.command(listFAQCommand)
-  .description('Lists all added question/answer pairs in FAQ')
-  .option('--channel <channel>', 'TODO')
-  .option('--username <username>', 'TODO')
-  .option('--broadcaster', 'TODO')
-  .option('--moderator', 'TODO')
-  .action((options) => {
-    const bot = manager.getChannel(options.channel);
-    const faq = bot.listFAQ();
-    application.say(options.channel, faq);
-  });
-
-cli.command(addQACommand)
-  .description('Adds question/answer pair to FAQ')
-  .argument('<question>', 'TODO')
-  .argument('<answer>', 'TODO')
-  .option('--channel <channel>', 'TODO')
-  .option('--username <username>', 'TODO')
-  .option('--broadcaster', 'TODO')
-  .option('--moderator', 'TODO')
-  .action((question, answer, options) => {
-    if (options.broadcaster === false && options.moderator === false) {
-      return;
-    }
-
-    const bot = manager.getChannel(options.channel);
-    bot.addQA(question, answer)
-      .catch(error => { console.log(error); });
-    application.say(options.channel, `Added "${question} -> ${answer}" to FAQ`);
-  });
-
-cli.command(removeQACommand)
-  .description('Removes question/answer pair to FAQ')
-  .argument('<index>', 'TODO')
-  .option('--channel <channel>', 'TODO')
-  .option('--username <username>', 'TODO')
-  .option('--broadcaster', 'TODO')
-  .option('--moderator', 'TODO')
-  .action((index, options) => {
-    if (options.broadcaster === false && options.moderator === false) {
-      return;
-    }
-
-    const bot = manager.getChannel(options.channel);
-    index = parseInt(index) - 1;
-    bot.removeQA(index)
-      .then(qa => { application.say(options.channel, `Removed "${qa}" from FAQ`); })
-      .catch(error => {
-        console.log(error.message);
-        application.say(options.channel, error.message);
-      });
-  });
 
 async function getStreams (): Promise<Array<{ channel: string, category: string }>> {
   const apiURL = 'https://api.twitch.tv/helix/streams';
@@ -292,24 +169,26 @@ async function getStreams (): Promise<Array<{ channel: string, category: string 
   return streams;
 }
 
-function pauseExecution (milliseconds: number): Promise<void> {
-  return new Promise<void>((resolve) => {
-    setTimeout(() => {
-      resolve();
-    }, milliseconds);
-  });
-}
-
 async function joinChannels (): Promise<undefined> {
   console.log('Updating Channels');
   const streams = await getStreams();
   for (const stream of streams) {
-    manager.addChannel(stream.channel);
-    application.join(stream.channel)
-      .then((data) => { console.log(data); })
-      .catch((error) => { console.log(error); });
-    manager.getChannel(stream.channel).setCategory(stream.category);
-    await pauseExecution(1000);
+    if (manager.channels.has(stream.channel)) {
+      const channelBot = await manager.getChannel(stream.channel);
+      void channelBot.setCategory(stream.category);
+      continue;
+    }
+
+    try {
+      await client.join(stream.channel);
+      await manager.addChannel(stream.channel);
+      const channelBot = await manager.getChannel(stream.channel);
+      void channelBot.setCategory(stream.category);
+    } catch (error) {
+      console.error(error);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   console.log('Done Joining');
 }

@@ -1,17 +1,38 @@
+import { parseArgsStringToArgv } from 'string-argv';
 import { StreamGuardBot } from './streamGuardBot.js';
 
 export const joinChannelCommand = '!guard';
 export const leaveChannelCommand = '!discharge';
 
 export class StreamGuardManager {
-  private channels: Map<string, StreamGuardBot>;
+
+  public channels: Map<string, StreamGuardBot>;
 
   constructor () {
     this.channels = new Map();
   }
 
-  addChannel (requestedChannel: string): void {
-    console.log(`Join ${requestedChannel}`);
+  public async commandHandler (client, channel, userstate, message): Promise<void> {
+    const [command, requestedChannel] = parseArgsStringToArgv(message);
+
+    switch (command) {
+      case joinChannelCommand: {
+        await this.addChannel(requestedChannel.toLowerCase());
+        client.join(requestedChannel.toLowerCase());
+        client.say(channel, `${requestedChannel} is now guarded!`);
+        break;
+      }
+      case leaveChannelCommand: {
+        await this.removeChannel(requestedChannel.toLowerCase());
+        client.say(channel, `Stream Guard Bot has left ${requestedChannel}`);
+        client.part(requestedChannel.toLowerCase());
+        break;
+      }
+    }
+  }
+
+  async addChannel (requestedChannel: string): Promise<void> {
+    console.log(`SGM add ${requestedChannel}`);
     if (this.channels.has(requestedChannel)) {
       return;
     }
@@ -19,13 +40,15 @@ export class StreamGuardManager {
     this.channels.set(requestedChannel, new StreamGuardBot(requestedChannel));
   }
 
-  removeChannel (requestedChannel: string): void {
-    console.log(`Part ${requestedChannel}`);
+  async removeChannel (requestedChannel: string): Promise<void> {
+    console.log(`SGM remove ${requestedChannel}`);
+    const channelBot = await this.getChannel(requestedChannel);
+    channelBot.writeStream.end();
     this.channels.delete(requestedChannel);
   }
 
-  getChannel (requestedChannel: string): StreamGuardBot {
-    console.log(`Get ${requestedChannel}`);
+  async getChannel (requestedChannel: string): Promise<StreamGuardBot> {
+    // console.log(`SGM get ${requestedChannel}`);
     if (!this.channels.has(requestedChannel)) {
       throw new ReferenceError(
         `Channel is not guarded, have you called ${joinChannelCommand} <your_channel_name> first?`
@@ -34,6 +57,7 @@ export class StreamGuardManager {
 
     return this.channels.get(requestedChannel);
   }
+
 }
 
 export default StreamGuardManager;

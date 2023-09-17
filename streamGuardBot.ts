@@ -3,7 +3,9 @@ import { LLMChain } from 'langchain/chains';
 import { PromptTemplate } from 'langchain/prompts';
 import { FaissStore } from 'langchain/vectorstores/faiss';
 import { OpenAIEmbeddings } from 'langchain/embeddings/openai';
-import * as fs from 'fs';
+import { parseArgsStringToArgv } from 'string-argv';
+import { createWriteStream } from 'fs';
+import type { WriteStream } from 'fs';
 
 export const addQACommand = '!addQA';
 export const removeQACommand = '!removeQA';
@@ -25,16 +27,49 @@ const qaTemplate = `As {channel}'s friendly AI Twitch assistant, your role is to
 const prompt = PromptTemplate.fromTemplate(qaTemplate);
 
 export class StreamGuardBot {
+
   private channel: string;
   private category: string;
   private qaChain: LLMChain;
   private vectorStore: FaissStore;
+  public writeStream: WriteStream;
 
   constructor (channel) {
     this.channel = channel;
+    this.writeStream = createWriteStream(`data/${this.channel}.tsv`, { flags: 'a' });
   }
 
-  public async addQA (question: string, answer: string): Promise<undefined> {
+  public async commandHandler (client, channel, userstate, message): Promise<void> {
+    const args = parseArgsStringToArgv(message);
+    if (
+      userstate.badges?.broadcaster === undefined &&
+      userstate.badges?.moderator === undefined &&
+      !message.startsWith(listFAQCommand)
+    ) {
+      client.say(channel, "Insufficient permission, please add your channel then go to your own channel's chat to add or remove questions to your FAQ");
+    }
+
+    switch (args[0]) {
+      case addQACommand: {
+        const [, question, answer] = args;
+        const response = await this.addQA(question, answer);
+        client.say(channel, response);
+        break;
+      }
+      case removeQACommand: {
+        const [, index] = args;
+        const response = this.removeQA(parseInt(index) + 1);
+        client.say(channel, response);
+        break;
+      }
+      case listFAQCommand: {
+        client.say(channel, this.listFAQ());
+        break;
+      }
+    }
+  }
+
+  public async addQA (question: string, answer: string): Promise<string> {
     if (this.vectorStore === undefined) {
       this.vectorStore = await FaissStore.fromDocuments([], embeddings);
       this.qaChain = new LLMChain({ llm: model, prompt: prompt, outputKey: 'answer' });
@@ -43,6 +78,7 @@ export class StreamGuardBot {
     console.log(`${this.channel} ${addQACommand}: "${question} -> ${answer}"`);
     const qa = { pageContent: `${question}\n${answer}`, metadata: {} };
     await this.vectorStore.addDocuments([qa]);
+    return `Added "${question} -> ${answer}" to FAQ`;
   }
 
   public async removeQA (index: number): Promise<string> {
@@ -51,7 +87,7 @@ export class StreamGuardBot {
       index < 0 ||
       index >= this.vectorStore.index.ntotal()
     ) {
-      throw new RangeError(`Question index does not exist, call ${listFAQCommand} to see all question indices`);
+      return `Question index does not exist, call ${listFAQCommand} to see all question indices`;
     }
 
     const faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
@@ -60,10 +96,10 @@ export class StreamGuardBot {
 
     faqs.splice(index, 1);
     this.vectorStore = await FaissStore.fromDocuments(faqs, embeddings);
-    return qa;
+    return `Removed "${qa}" from FAQ`;
   }
 
-  public listFAQ (): string {
+  public async listFAQ (): Promise<string> {
     console.log(`${this.channel} ${listFAQCommand}`);
     let faqs;
     faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
@@ -75,7 +111,7 @@ export class StreamGuardBot {
 
   public async respond (question: string): Promise<string> {
     if (this.vectorStore?._index === undefined) {
-      throw ReferenceError('No questions have been added');
+      return '';
     }
 
     const result = (await this.vectorStore.similaritySearchWithScore(question, 1))[0];
@@ -92,15 +128,19 @@ export class StreamGuardBot {
     return (answer !== notInFAQ) ? answer : '';
   }
 
-  public setCategory (category: string): void {
+  public async setCategory (category: string): Promise<void> {
     this.category = category;
   }
 
-  public async logMessage (username: string, message: string): Promise<undefined> {
+  public logMessage (username: string, message: string): void {
     const timestamp = new Date().toISOString();
-    const filePath = `data/${this.channel}.tsv`;
     const data = `${timestamp}\t${this.category}\t${username}\t${message}\n`;
-    fs.promises.appendFile(filePath, data)
-      .catch(error => { console.log(error); });
+
+    try {
+      this.writeStream.write(data);
+    } catch (error) {
+      console.error(error);
+    }
   }
+
 }
