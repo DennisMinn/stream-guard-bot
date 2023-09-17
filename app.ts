@@ -37,9 +37,9 @@ client.on('connected', async (address, port) => {
   console.log(`* Connected to ${address}:${port}`);
   void manager.addChannel(process.env.STREAM_GUARD_USERNAME);
   void joinChannels();
-  // setInterval(joinChannels, 1800000);
+  setInterval(joinChannels, 1800000);
 });
-
+/*
 client.on('chat', async (channel, userstate, message, self) => {
   if (userstate.username === process.env.STREAM_GUARD_USERNAME) {
     return;
@@ -57,14 +57,14 @@ client.on('chat', async (channel, userstate, message, self) => {
 
   // Stream Guard Manager commands
   if (sgmCommands.some(command => message.startsWith(command))) {
-    await manager.commandHandler(client, channel, userstate, message);
+    void manager.commandHandler(client, channel, userstate, message);
     return;
   }
 
   // Stream Guard Bot commands
   if (sgbCommands.some(command => message.startsWith(command))) {
     const channelBot = await manager.getChannel(channel);
-    await channelBot.commandHandler(client, channel, userstate, message);
+    void channelBot.commandHandler(client, channel, userstate, message);
     return;
   }
 
@@ -74,6 +74,7 @@ client.on('chat', async (channel, userstate, message, self) => {
     client.say(channel, `@${userstate.username} ${response}`);
   }
 });
+**/
 
 // Logging
 client.on('chat', (channel, userstate, message, self) => {
