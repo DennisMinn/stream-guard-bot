@@ -41,23 +41,26 @@ export class StreamGuardBot {
 
   public async commandHandler (client, channel, userstate, message): Promise<void> {
     const args = parseArgsStringToArgv(message);
-    if (
-      userstate.badges?.broadcaster === undefined &&
-      userstate.badges?.moderator === undefined &&
-      !message.startsWith(listFAQCommand)
-    ) {
-      client.say(channel, "Insufficient permission, please add your channel then go to your own channel's chat to add or remove questions to your FAQ");
-    }
+    const isBroadcaster = userstate.badges?.broadcaster !== undefined;
+    const isModerator = userstate.badges?.moderator !== undefined;
 
     switch (args[0]) {
       case addQACommand: {
         const [, question, answer] = args;
-        const response = await this.addQA(question, answer);
+        if (question === undefined) throw new SyntaxError('Question not specified');
+        if (answer === undefined) throw new SyntaxError('Answer not specified');
+        if (!isBroadcaster && !isModerator) throw new Error('Insufficent Permission');
+
+        const response = this.addQA(question, answer);
         client.say(channel, response);
+
         break;
       }
       case removeQACommand: {
         const [, index] = args;
+        if (index === undefined) throw new SyntaxError('Index not specified');
+        if (!isBroadcaster && !isModerator) throw new Error('Insufficent Permission');
+
         const response = this.removeQA(parseInt(index) + 1);
         client.say(channel, response);
         break;

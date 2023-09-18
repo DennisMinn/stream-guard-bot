@@ -100,7 +100,7 @@ client.on('messagedeleted', (channel, username, deletedMessage, userstate) => {
 client.connect();
 
 async function refreshUserAccessToken (): Promise<undefined> {
-  const apiURL = 'https://id.twitch.tv/oauth2/token';
+  const url = 'https://id.twitch.tv/oauth2/token';
   const data = new URLSearchParams({
     client_id: CLIENTID,
     client_secret: CLIENTSECRET,
@@ -108,15 +108,21 @@ async function refreshUserAccessToken (): Promise<undefined> {
     refresh_token: refreshToken
   });
 
-  const response = await fetch(apiURL, {
+  const options = {
     method: 'POST',
-    headers: { 'Content-Type': 'client/x-www-form-urlencoded' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
     body: data
-  });
+  };
+
+  const response = await fetch(url, options);
 
   const token = await response.json();
+  console.log(token);
   accessToken = token.access_token;
   refreshToken = token.refresh_token;
+  console.log({ accessToken, refreshToken });
 }
 
 async function getStreams (): Promise<Array<{ channel: string, category: string }>> {

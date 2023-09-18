@@ -50,9 +50,7 @@ export class StreamGuardManager {
   async getChannel (requestedChannel: string): Promise<StreamGuardBot> {
     // console.log(`SGM get ${requestedChannel}`);
     if (!this.channels.has(requestedChannel)) {
-      throw new ReferenceError(
-        `Channel is not guarded, have you called ${joinChannelCommand} <your_channel_name> first?`
-      );
+      await this.addChannel(requestedChannel);
     }
 
     return this.channels.get(requestedChannel);
