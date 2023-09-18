@@ -122,10 +122,9 @@ async function refreshUserAccessToken (): Promise<undefined> {
   console.log(token);
   accessToken = token.access_token;
   refreshToken = token.refresh_token;
-  console.log({ accessToken, refreshToken });
 }
 
-async function getStreams (): Promise<Array<{ channel: string, category: string }>> {
+async function getStreams (): Promise<Array<{ channel: string, category: string, views: number}>> {
   const apiURL = 'https://api.twitch.tv/helix/streams';
   const queryParameters = new URLSearchParams({
     language: 'en',
@@ -133,9 +132,8 @@ async function getStreams (): Promise<Array<{ channel: string, category: string 
     after: ''
   });
 
-  let streams: Array<{ channel: string, category: string }> = [];
-  let counter = 0;
-  while (counter <= 150) {
+  let streams: Array<{ channel: string, category: string, views: number}> = [];
+  while (true) {
     const response = await fetch(`${apiURL}?${queryParameters.toString()}`, {
       headers: {
         'Client-ID': CLIENTID,
@@ -161,7 +159,8 @@ async function getStreams (): Promise<Array<{ channel: string, category: string 
     const { data, pagination } = await response.json();
     const extractedStreams = data.map(stream => ({
       channel: stream.user_login,
-      category: stream.game_name
+      category: stream.game_name,
+      views: stream.viewer_count
     }));
 
     streams = streams.concat(extractedStreams);
@@ -170,10 +169,11 @@ async function getStreams (): Promise<Array<{ channel: string, category: string 
       break;
     }
     queryParameters.set('after', pagination.cursor);
-    counter = counter + 1;
   }
 
-  return streams;
+  const filteredStreams = streams.filter(stream => stream.views > 100);
+  console.log(filteredStreams.length);
+  return filteredStreams;
 }
 
 async function joinChannels (): Promise<undefined> {
