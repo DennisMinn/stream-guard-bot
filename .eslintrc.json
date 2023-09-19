@@ -16,10 +16,16 @@
         "react"
     ],
     "rules": {
-        "indent": ["error", 2],
+        "indent": "off",
 		"quotes": ["error", "single"],
 		"no-trailing-spaces": "error",
         "semi": ["error", "always"],
-        "@typescript-eslint/semi": "off"
+        "padded-blocks": [2, {
+            "blocks": "never",
+            "classes": "always",
+            "switches": "never"
+        }],
+        "@typescript-eslint/semi": "off",
+        "@typescript-eslint/indent": ["error", 2]
     }
 }
