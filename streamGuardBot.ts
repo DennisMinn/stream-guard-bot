@@ -4,42 +4,56 @@ import { PromptTemplate } from 'langchain/prompts';
 import { FaissStore } from 'langchain/vectorstores/faiss';
 import { OpenAIEmbeddings } from 'langchain/embeddings/openai';
 import { parseArgsStringToArgv } from 'string-argv';
-import { createWriteStream } from 'fs';
-import type { WriteStream } from 'fs';
+import type { client as Client, ChatUserstate } from 'tmi.js';
 
 export const addQACommand = '!addQA';
 export const removeQACommand = '!removeQA';
 export const listFAQCommand = '!listFAQ';
 const notInFAQ = "The information isn't specified in the FAQ.";
 
-const model = new OpenAI({
+const embeddings = new OpenAIEmbeddings({ maxConcurrency: 100 });
+
+// Set up Question Answer model
+const qaModel = new OpenAI({
   modelName: 'gpt-3.5-turbo',
   temperature: 0,
   maxConcurrency: 100
 });
-const embeddings = new OpenAIEmbeddings({ maxConcurrency: 100 });
 const qaTemplate = `As {channel}'s friendly AI Twitch assistant, your role is to respond to users. Remember, users are communicating with {channel}, not you. To answer their queries, refer to {channel}'s FAQ. Keep your responses concise, under 25 words, and respond in the 3rd person. If the answer is not provided in the FAQ, respond with "${notInFAQ}". Do not make up your response.
 << FAQ >>
 {faq}
 
 << user >>
 {question}`;
-const prompt = PromptTemplate.fromTemplate(qaTemplate);
+const qaPrompt = PromptTemplate.fromTemplate(qaTemplate);
+
+// Set up Moderation model
+const moderationModel = new OpenAI({
+  modelName: 'ft:babbage-002:personal::8ELHpKGY',
+  maxTokens: 1,
+  temperature: 0,
+  maxConcurrency: 100
+});
+const moderationTemplate = '{{text: {text}, channel: {channel}, category: {category}}}';
+const moderationPrompt = PromptTemplate.fromTemplate(moderationTemplate);
 
 export class StreamGuardBot {
 
-  private channel: string;
-  private category: string;
-  private qaChain: LLMChain;
+  readonly userId: string;
+  readonly channel: string;
+  readonly qaChain: LLMChain;
+  readonly moderationChain: LLMChain;
+  public category: string;
   private vectorStore: FaissStore;
-  public writeStream: WriteStream;
 
-  constructor (channel) {
+  constructor (userId: string, channel: string) {
+    this.userId = userId;
     this.channel = channel;
-    this.writeStream = createWriteStream(`data/${this.channel}.tsv`, { flags: 'a' });
+    this.qaChain = new LLMChain({ llm: qaModel, prompt: qaPrompt });
+    this.moderationChain = new LLMChain({ llm: moderationModel, prompt: moderationPrompt });
   }
 
-  public async commandHandler (client, channel, userstate, message): Promise<void> {
+  public async commandHandler (client: InstanceType<typeof Client>, channel: string, userstate: ChatUserstate, message: string): Promise<void> {
     const args = parseArgsStringToArgv(message);
     const isBroadcaster = userstate.badges?.broadcaster !== undefined;
     const isModerator = userstate.badges?.moderator !== undefined;
@@ -51,7 +65,7 @@ export class StreamGuardBot {
         if (answer === undefined) throw new SyntaxError('Answer not specified');
         if (!isBroadcaster && !isModerator) throw new Error('Insufficent Permission');
 
-        const response = this.addQA(question, answer);
+        const response = await this.addQA(question, answer);
         client.say(channel, response);
 
         break;
@@ -61,7 +75,7 @@ export class StreamGuardBot {
         if (index === undefined) throw new SyntaxError('Index not specified');
         if (!isBroadcaster && !isModerator) throw new Error('Insufficent Permission');
 
-        const response = this.removeQA(parseInt(index) + 1);
+        const response = await this.removeQA(parseInt(index) - 1);
         client.say(channel, response);
         break;
       }
@@ -75,7 +89,6 @@ export class StreamGuardBot {
   public async addQA (question: string, answer: string): Promise<string> {
     if (this.vectorStore === undefined) {
       this.vectorStore = await FaissStore.fromDocuments([], embeddings);
-      this.qaChain = new LLMChain({ llm: model, prompt: prompt, outputKey: 'answer' });
     }
 
     console.log(`${this.channel} ${addQACommand}: "${question} -> ${answer}"`);
@@ -102,8 +115,7 @@ export class StreamGuardBot {
     return `Removed "${qa}" from FAQ`;
   }
 
-  public async listFAQ (): Promise<string> {
-    console.log(`${this.channel} ${listFAQCommand}`);
+  public listFAQ (): string {
     let faqs;
     faqs = Array.from(this.vectorStore.getDocstore()._docs.values());
     faqs = faqs.map((faq, index) => `${index + 1}) ${faq.pageContent}`);
@@ -125,25 +137,20 @@ export class StreamGuardBot {
       console.log(`Not close enough distance: ${l2Distance}`);
       return '';
     }
-    const answer = (await this.qaChain.invoke({ channel: this.channel, faq: faq, question: question })).answer;
+    const answer = (await this.qaChain.invoke({ channel: this.channel, faq, question })).text;
 
     console.log(`${this.channel} respond: ${question} -> ${answer}`);
     return (answer !== notInFAQ) ? answer : '';
   }
 
-  public async setCategory (category: string): Promise<void> {
-    this.category = category;
+  public async moderate (text: string): Promise<boolean> {
+    console.log('moderation');
+    const label = (await this.moderationChain.invoke({ channel: this.channel, category: 'League of Legends', text })).text;
+    return label === '1';
   }
 
-  public logMessage (username: string, message: string): void {
-    const timestamp = new Date().toISOString();
-    const data = `${timestamp}\t${this.category}\t${username}\t${message}\n`;
-
-    try {
-      this.writeStream.write(data);
-    } catch (error) {
-      console.error(error);
-    }
+  public async setCategory (category: string): Promise<void> {
+    this.category = category;
   }
 
 }

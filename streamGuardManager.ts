@@ -1,5 +1,5 @@
-import { parseArgsStringToArgv } from 'string-argv';
 import { StreamGuardBot } from './streamGuardBot.js';
+import type { client as Client, ChatUserstate } from 'tmi.js';
 
 export const joinChannelCommand = '!guard';
 export const leaveChannelCommand = '!discharge';
@@ -12,45 +12,40 @@ export class StreamGuardManager {
     this.channels = new Map();
   }
 
-  public async commandHandler (client, channel, userstate, message): Promise<void> {
-    const [command, requestedChannel] = parseArgsStringToArgv(message);
+  public async commandHandler (client: InstanceType<typeof Client>, channel: string, userstate: ChatUserstate, message: string): Promise<void> {
+    const username = userstate.username as string;
+    const userId = userstate['user-id'] as string;
 
-    switch (command) {
+    switch (message) {
       case joinChannelCommand: {
-        await this.addChannel(requestedChannel.toLowerCase());
-        client.join(requestedChannel.toLowerCase());
-        client.say(channel, `${requestedChannel} is now guarded!`);
+        this.addChannel(userId, username);
+        await client.say(channel, `${username} is now guarded!`);
         break;
       }
       case leaveChannelCommand: {
-        await this.removeChannel(requestedChannel.toLowerCase());
-        client.say(channel, `Stream Guard Bot has left ${requestedChannel}`);
-        client.part(requestedChannel.toLowerCase());
-        break;
+        this.removeChannel(username);
+        await client.say(channel, `Stream Guard Bot has left ${username}`);
       }
     }
   }
 
-  async addChannel (requestedChannel: string): Promise<void> {
+  addChannel (userId: string, requestedChannel: string): void {
     console.log(`SGM add ${requestedChannel}`);
     if (this.channels.has(requestedChannel)) {
       return;
     }
 
-    this.channels.set(requestedChannel, new StreamGuardBot(requestedChannel));
+    this.channels.set(requestedChannel, new StreamGuardBot(userId, requestedChannel));
   }
 
-  async removeChannel (requestedChannel: string): Promise<void> {
+  removeChannel (requestedChannel: string): void {
     console.log(`SGM remove ${requestedChannel}`);
-    const channelBot = await this.getChannel(requestedChannel);
-    channelBot.writeStream.end();
     this.channels.delete(requestedChannel);
   }
 
-  async getChannel (requestedChannel: string): Promise<StreamGuardBot> {
-    // console.log(`SGM get ${requestedChannel}`);
-    if (!this.channels.has(requestedChannel)) {
-      await this.addChannel(requestedChannel);
+  getChannel (requestedChannel: string): StreamGuardBot {
+    if (this.channels.get(requestedChannel) === undefined) {
+      throw new SyntaxError('Channel not added');
     }
 
     return this.channels.get(requestedChannel);

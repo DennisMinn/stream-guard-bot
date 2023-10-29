@@ -25,7 +25,9 @@
             "classes": "always",
             "switches": "never"
         }],
+        "object-shorthand": ["error", "always", { "ignoreConstructors": true }],
         "@typescript-eslint/semi": "off",
-        "@typescript-eslint/indent": ["error", 2]
+        "@typescript-eslint/indent": ["error", 2],
+        "@typescript-eslint/no-misused-promises": ["error", { "checksVoidReturn": false }]
     }
 }
