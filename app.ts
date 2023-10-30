@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { client as Client } from 'tmi.js';
 import { StreamGuardManager, joinChannelCommand, leaveChannelCommand } from './streamGuardManager.js';
-import { addQACommand, removeQACommand, listFAQCommand } from './streamGuardBot.js';
+import { addQACommand, removeQACommand, listFAQCommand, setModerationLevelCommand } from './streamGuardBot.js';
 import type { ChatUserstate } from 'tmi.js';
 
 import * as dotenv from 'dotenv';
@@ -13,7 +13,7 @@ const USERNAME = process.env.STREAM_GUARD_USERNAME as string;
 const USERID = process.env.STREAM_GUARD_USERID as string;
 
 const sgmCommands: string[] = [joinChannelCommand, leaveChannelCommand];
-const sgbCommands: string[] = [addQACommand, removeQACommand, listFAQCommand];
+const sgbCommands: string[] = [addQACommand, removeQACommand, listFAQCommand, setModerationLevelCommand];
 const allCommands: string[] = sgmCommands.concat(sgbCommands);
 
 let accessToken = process.env.STREAM_GUARD_OAUTH_TOKEN as string;
@@ -45,7 +45,6 @@ client.on('disconnected', async (reason: string) => {
 });
 
 client.on('chat', async (channel: string, userstate: ChatUserstate, message: string, self: boolean) => {
-  console.log(userstate);
   if (self) {
     return;
   }
@@ -62,6 +61,11 @@ client.on('chat', async (channel: string, userstate: ChatUserstate, message: str
 
   // Stream Guard Manager commands
   if (sgmCommands.some(command => message.startsWith(command))) {
+    // SGM Commands should only be called in SGB's channel
+    if (channel !== USERNAME) {
+      return;
+    }
+
     try {
       await manager.commandHandler(client, channel, userstate, message);
     } catch (error) {
@@ -77,7 +81,7 @@ client.on('chat', async (channel: string, userstate: ChatUserstate, message: str
       const channelBot = manager.getChannel(channel);
       await channelBot.commandHandler(client, channel, userstate, message);
     } catch (error) {
-      console.log(error.message);
+      console.log(error);
       client.say(channel, error.message);
     }
     return;
@@ -85,10 +89,25 @@ client.on('chat', async (channel: string, userstate: ChatUserstate, message: str
 
   const channelBot = manager.getChannel(channel);
   const moderation = await channelBot.moderate(message);
-  if (moderation) {
-    // deleteMessage(channel, userstate);
-    banUser(channel, userstate, message, 10);
+  try {
+    switch (moderation) {
+      case 1: {
+        await deleteMessage(channel, userstate);
+        return;
+      }
+      case 2: {
+        await banUser(channel, userstate, message, 6000);
+        return;
+      }
+      case 3: {
+        await banUser(channel, userstate, message);
+        return;
+      }
+    }
+  } catch (error) {
+    console.log(error);
   }
+
   const response = await channelBot.respond(message);
   if (response !== undefined && response !== '') {
     client.say(channel, `@${userstate.username} ${response}`).catch(error => { console.log(error); });
@@ -112,16 +131,10 @@ async function refreshUserAccessToken (): Promise<undefined> {
     refresh_token: encodeURIComponent(refreshToken)
   });
 
-  const options = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: data
-  };
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
 
-  const response = await fetch(url, options);
-  const token = await response.json();
+  const response = await axios.post(url, data.toString(), { headers });
+  const token = response.data;
 
   // Assign new token
   accessToken = token.access_token;
@@ -154,7 +167,7 @@ async function deleteMessage (channel: string, userstate: ChatUserstate): Promis
   await axios.delete(`${url}?${queryParams}`, { headers });
 }
 
-async function banUser (channel: string, userstate: ChatUserstate, message: string, duration: number = 0): Promise<void> {
+async function banUser (channel: string, userstate: ChatUserstate, message: string, duration: number = -1): Promise<void> {
   const url = 'https://api.twitch.tv/helix/moderation/bans';
   const broadcasterId = manager.getChannel(channel).userId;
   const moderatorId = USERID;
@@ -163,7 +176,7 @@ async function banUser (channel: string, userstate: ChatUserstate, message: stri
   const requestBody = {
     data: {
       user_id: userId,
-      duration,
+      duration: (duration !== -1) ? duration : undefined,
       reason: `Inappropriate message detected by Stream Guard Bot: ${message}`
     }
   };

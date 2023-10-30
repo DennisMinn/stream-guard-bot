@@ -1,4 +1,5 @@
-import { OpenAI } from 'langchain/llms/openai';
+import OpenAI from 'openai';
+import { OpenAI as LangChainOpenAI } from 'langchain/llms/openai';
 import { LLMChain } from 'langchain/chains';
 import { PromptTemplate } from 'langchain/prompts';
 import { FaissStore } from 'langchain/vectorstores/faiss';
@@ -9,12 +10,15 @@ import type { client as Client, ChatUserstate } from 'tmi.js';
 export const addQACommand = '!addQA';
 export const removeQACommand = '!removeQA';
 export const listFAQCommand = '!listFAQ';
+export const setModerationLevelCommand = '!moderationLevel';
 const notInFAQ = "The information isn't specified in the FAQ.";
+const moderationLevelMessages = ['None', 'Delete Message', '10 Minute Timeout', 'Ban'];
 
 const embeddings = new OpenAIEmbeddings({ maxConcurrency: 100 });
 
 // Set up Question Answer model
-const qaModel = new OpenAI({
+const moderationModel = new OpenAI();
+const qaModel = new LangChainOpenAI({
   modelName: 'gpt-3.5-turbo',
   temperature: 0,
   maxConcurrency: 100
@@ -27,22 +31,13 @@ const qaTemplate = `As {channel}'s friendly AI Twitch assistant, your role is to
 {question}`;
 const qaPrompt = PromptTemplate.fromTemplate(qaTemplate);
 
-// Set up Moderation model
-const moderationModel = new OpenAI({
-  modelName: 'ft:babbage-002:personal::8ELHpKGY',
-  maxTokens: 1,
-  temperature: 0,
-  maxConcurrency: 100
-});
-const moderationTemplate = '{{text: {text}, channel: {channel}, category: {category}}}';
-const moderationPrompt = PromptTemplate.fromTemplate(moderationTemplate);
 
 export class StreamGuardBot {
 
   readonly userId: string;
   readonly channel: string;
   readonly qaChain: LLMChain;
-  readonly moderationChain: LLMChain;
+  public moderationLevel: number;
   public category: string;
   private vectorStore: FaissStore;
 
@@ -50,7 +45,7 @@ export class StreamGuardBot {
     this.userId = userId;
     this.channel = channel;
     this.qaChain = new LLMChain({ llm: qaModel, prompt: qaPrompt });
-    this.moderationChain = new LLMChain({ llm: moderationModel, prompt: moderationPrompt });
+    this.moderationLevel = 0;
   }
 
   public async commandHandler (client: InstanceType<typeof Client>, channel: string, userstate: ChatUserstate, message: string): Promise<void> {
@@ -63,17 +58,16 @@ export class StreamGuardBot {
         const [, question, answer] = args;
         if (question === undefined) throw new SyntaxError('Question not specified');
         if (answer === undefined) throw new SyntaxError('Answer not specified');
-        if (!isBroadcaster && !isModerator) throw new Error('Insufficent Permission');
+        if (!isBroadcaster && !isModerator) throw new Error('Insufficent Permission, please call this command in your own channel');
 
         const response = await this.addQA(question, answer);
         client.say(channel, response);
-
         break;
       }
       case removeQACommand: {
         const [, index] = args;
         if (index === undefined) throw new SyntaxError('Index not specified');
-        if (!isBroadcaster && !isModerator) throw new Error('Insufficent Permission');
+        if (!isBroadcaster && !isModerator) throw new Error('Insufficent Permission, please call this command in your own channel');
 
         const response = await this.removeQA(parseInt(index) - 1);
         client.say(channel, response);
@@ -82,6 +76,13 @@ export class StreamGuardBot {
       case listFAQCommand: {
         client.say(channel, this.listFAQ());
         break;
+      }
+      case setModerationLevelCommand: {
+        const [, moderationLevel] = args;
+        if (!isBroadcaster && !isModerator) throw new Error('Insufficent Permission, please call this command in your own channel');
+
+        const response = this.setModerationLevel(Number(moderationLevel));
+        client.say(channel, response);
       }
     }
   }
@@ -124,6 +125,15 @@ export class StreamGuardBot {
     return faqs;
   }
 
+  public setModerationLevel (moderationLevel: number): string {
+    if (isNaN(moderationLevel) || moderationLevel < 0 || moderationLevel >= moderationLevelMessages.length) {
+      return `Invalid moderation level: ${moderationLevel}. Set moderation level between 0 and ${moderationLevelMessages.length - 1}`;
+    }
+
+    this.moderationLevel = moderationLevel;
+    return `Current punishment for message violation: ${moderationLevelMessages[this.moderationLevel]}`;
+  }
+
   public async respond (question: string): Promise<string> {
     if (this.vectorStore?._index === undefined) {
       return '';
@@ -143,10 +153,23 @@ export class StreamGuardBot {
     return (answer !== notInFAQ) ? answer : '';
   }
 
-  public async moderate (text: string): Promise<boolean> {
-    console.log('moderation');
-    const label = (await this.moderationChain.invoke({ channel: this.channel, category: 'League of Legends', text })).text;
-    return label === '1';
+  public async moderate (text: string): Promise<number> {
+    if (this.moderationLevel === 0) {
+      return 0;
+    }
+
+    const prompt = `{text: ${text}, channel: ${this.channel}, category: ${this.category}}`;
+    const completion = await moderationModel.completions.create({
+      model: 'ft:babbage-002:personal::8ELHpKGY',
+      prompt,
+      logprobs: 1,
+      max_tokens: 1,
+      temperature: 0
+    });
+
+    const probability = Math.exp(completion.choices[0].logprobs.token_logprobs[0]);
+    console.log(probability);
+    return (probability > 0.85) ? this.moderationLevel : 0;
   }
 
   public async setCategory (category: string): Promise<void> {
